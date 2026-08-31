@@ -23,4 +23,5 @@ with DAG(
     )
 
     dummy_task >> second_task
-    dummy_task >> third_task 
+    dummy_task >> third_task
+
