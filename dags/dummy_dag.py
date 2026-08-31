@@ -24,4 +24,4 @@ with DAG(
 
     dummy_task >> second_task
     dummy_task >> third_task
-
+ dags/python_operator_example.py не найден
