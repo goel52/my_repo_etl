@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta
 from urllib.parse import urljoin
 
+import psycopg
 import pydantic
 import requests
 from airflow import DAG
@@ -31,7 +32,6 @@ class UserOrderModel(pydantic.BaseModel):
     quantity: int
     payment_amount: int
 
-
 class UserActivityModel(pydantic.BaseModel):
     id: int
     uniq_id: str
@@ -50,7 +50,6 @@ def parse_user_order_log():
         respmodel = UserOrderModel(**row)
         print(*respmodel.model_dump().values())
 
-
 def parse_user_activity_log():
     payload = {'limit': '20000000', 'filter': {'date': '2024-09-19'}}
     resp = requests.post(urljoin(API_host, 'user_activity_log'), data=json.dumps(payload))
@@ -66,13 +65,13 @@ with DAG('api_data_load',
          start_date=datetime(2024, 1, 1),
          catchup=False,
          schedule_interval='@once',
-         max_active_runs=1) as dag:
+         max_active_runs=1
+) as dag:
     user_order_task = PythonOperator(
         task_id='user_order_task',
         python_callable=parse_user_order_log,
         provide_context=True
     )
-
     user_activity_task = PythonOperator(
         task_id='user_activity_task',
         python_callable=parse_user_activity_log,
