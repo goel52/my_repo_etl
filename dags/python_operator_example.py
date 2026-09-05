@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 
 from airflow import DAG
-from airflow.operators.python import PythonOperator  # Импортируем оператор
+from airflow.operators.python import PythonOperator
+
 
 default_args = {
     'owner': 'airflow',
@@ -20,14 +21,16 @@ def print_weekday(**kwargs):
 
 with DAG('python_operator_example',
          default_args=default_args,
-         start_date=datetime(2024, 1, 1),
+         start_date=datetime(2024,1,1),
+         schedule_interval="@daily",
          max_active_runs=1,
-         catchup=True) as dag:  # Создаём объект DAG
+         catchup=True,
+         max_active_runs=1) as dag:
 
-    weekday_task = PythonOperator(task_id='weekday_task',
-                                  python_callable=print_weekday,
-                                  op_kwargs={'date': '01.01.2000'}
-                                  # Обратите внимание, что функция не вызывается, а передаётся
-                                  )
+    weekday_task = PythonOperator(
+        task_id='weekday_task',
+        python_callable=print_weekday,
+        op_kwargs={'date':'01.01.2000'}
+    )
 
     weekday_task
