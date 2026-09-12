@@ -294,4 +294,4 @@ with DAG('api_data_load',
                                 provide_context=True)
 
     (order_log >> activity_log >> d_customer >> d_city >>
-    d_item >> f_order >> f_activity)
+    d_item >> f_order >> f_activity >> customer_report)
