@@ -8,6 +8,74 @@ import requests
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
+
+
+
+
+def insert_user_order_log():
+    query = """
+select 1;
+            """
+    with psycopg.connect(
+            **PG_CONNECTION
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+
+
+def insert_user_activity_log():
+    query = """
+ select 1;
+             """
+    with psycopg.connect(
+            **PG_CONNECTION
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)\
+
+def d_city():
+    query = """
+select 1;
+            """
+    with psycopg.connect(
+            **PG_CONNECTION
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+
+
+
+def d_item():
+    query = """
+select 1;
+            """
+    with psycopg.connect(
+            **PG_CONNECTION
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+
+
+def d_customer():
+    query = """
+select 1;
+            """
+    with psycopg.connect(
+            **PG_CONNECTION
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+
+def d_customer():
+    query = """
+select 1;
+            """
+    with psycopg.connect(
+            **PG_CONNECTION
+    ) as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+
 def load_f_order():
     query = """
             INSERT INTO public.f_order (order_id, create_date, customer_id, city_id, item_id, quantity, payment_amount)
@@ -65,13 +133,13 @@ with DAG('api_data_load',
          schedule_interval='@daily',
          catchup=True,
          max_active_runs=1) as dag:
-    # order_log = PythonOperator(task_id='order_log',
-    #                            python_callable=insert_user_order_log,
-    #                            provide_context=True)
-    #
-    # activity_log = PythonOperator(task_id='activity_log',
-    #                               python_callable=insert_user_activity_log,
-    #                               provide_context=True)
+    order_log = PythonOperator(task_id='order_log',
+                               python_callable=insert_user_order_log,
+                               provide_context=True)
+
+    activity_log = PythonOperator(task_id='activity_log',
+                                  python_callable=insert_user_activity_log,
+                                  provide_context=True)
 
     ##############################################################################
     #  Task таблиц измерений
@@ -85,5 +153,5 @@ with DAG('api_data_load',
                              python_callable=load_f_activity,
                              provide_context=True)
 
-    # (order_log >> activity_log >> d_customer >> d_city >>d_item >> f_order)  # не забудьте добавить новую задачу в последовательность
-    ( f_order >> f_activity)
+    (order_log >> activity_log >> d_customer >> d_city >>d_item >> f_order)  # не забудьте добавить новую задачу в последовательность
+    # ( f_order >> f_activity)
