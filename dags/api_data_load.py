@@ -1,54 +1,104 @@
 import json
-from datetime import timedelta
-from urllib.parse import urljoin
+from datetime import datetime
 
-import requests
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
-
-default_args = {
-    'owner': 'airflow',
-    'concurrency': 1,
-    'retries': 2,
-    'retry_delay': timedelta(minutes=5),
-}
-
-API_host = 'https://de-start-sprint-etl-airflow-api.de.education-services.ru'
-API_method = 'user_order_log'
-
-payload ={'limit': '2', 'filter': {'date': '2024-09-19'}}
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
+from airflow.providers.http.operators.http import HttpOperator
+from airflow.providers.http.sensors.http import HttpSensor
+from data_models.api_pipeline_config import pipeline_config  # импорт конфига
+from data_models.dag_default_args import default_args
+from utils.parsing_utils import (
+    get_insert_user_activity_log,
+    get_insert_user_order_log,
+)
 
 
-def print_user_order_log():
-    resp = requests.post(urljoin(API_host, API_method), data=json.dumps(payload))
-    resp.raise_for_status()
-    print(resp.text)
-
-
-def print_user_activity_log():
-    resp = requests.post(urljoin(API_host, 'user_activity_log'), data=json.dumps(payload))
-    resp.raise_for_status()
-    print(resp.text)
+def response_check(response):
+    response = json.loads(response.text)
+    return response["status"] == "OK"
 
 
 with DAG(
-        dag_id='api_data_load',
-        default_args=default_args,
-        start_date=days_ago(2),
-        max_active_runs=1,
-        catchup=False,
-        schedule_interval='@daily',
-        tags=['API']
+    "api_data_load",
+    default_args=default_args,
+    start_date=datetime(2024, 1, 1),
+    schedule_interval="@daily",
+    tags=["API", "Postgres"],
+    catchup=True,
+    max_active_runs=1,
 ) as dag:
-    user_order_task = PythonOperator(
-        task_id='user_order_task',
-        python_callable=print_user_order_log
+    check_api = HttpSensor(
+        task_id="check_api",
+        http_conn_id=pipeline_config[
+            "api_connection"
+        ],  # новый способ передать Connection
+        endpoint="healthcheck",
+        method="GET",
+        headers={"Content-Type": "application/json"},
+        response_check=response_check,
+        poke_interval=60 * 3,
+        timeout=60 * 24,
+        mode="reschedule",
+        pool="API_pool",
     )
 
-    user_activity_task = PythonOperator(
-        task_id='user_activity_task',
-        python_callable=print_user_activity_log
-    )   
+    clean_order_log = SQLExecuteQueryOperator(
+        task_id="clean_order_log",
+        conn_id=pipeline_config[
+            "db_connection"
+        ],  # новый способ передать Connection
+        sql=""" DELETE FROM raw.user_order_log
+               WHERE date_time::date='{{ ds }}'""",
+    )
 
-    user_order_task >> user_activity_task
+    order_log_query = HttpOperator(
+        task_id="order_log_query",
+        http_conn_id=pipeline_config["api_connection"],
+        endpoint="user_order_log",
+        method="POST",
+        data=json.dumps({"limit": "20000000", "filter": {"date": "{{ ds }}"}}),
+        headers={"Content-Type": "application/json"},
+        log_response=True,
+        pool="API_pool",
+    )
+
+    order_log = PythonOperator(
+        task_id="order_log",
+        python_callable=get_insert_user_order_log,
+        provide_context=True,
+    )
+
+    clean_activity_log = SQLExecuteQueryOperator(
+        task_id="clean_activity_log",
+        conn_id=pipeline_config["db_connection"],
+        sql=""" DELETE FROM raw.user_activity_log
+                 WHERE date_time::date='{{ ds }}'""",
+    )
+
+    activity_log_query = HttpOperator(
+        task_id="activity_log_query",
+        http_conn_id=pipeline_config["api_connection"],
+        endpoint="user_activity_log",
+        method="POST",
+        data=json.dumps({"limit": "20000000", "filter": {"date": "{{ ds }}"}}),
+        headers={"Content-Type": "application/json"},
+        log_response=True,
+        pool="API_pool",
+    )
+
+    activity_log = PythonOperator(
+        task_id="activity_log",
+        python_callable=get_insert_user_activity_log,
+        provide_context=True,
+    )
+
+    (
+        check_api
+        >> clean_order_log
+        >> order_log_query
+        >> order_log
+        >> clean_activity_log
+        >> activity_log_query
+        >> activity_log
+    )
